@@ -65,9 +65,9 @@
         <i class="fa-solid fa-chart-candlestick text-amber-400 text-xl"></i>
         <div>
           <h1 class="text-base font-bold leading-tight bg-gradient-to-r from-red-400 to-amber-300 bg-clip-text text-transparent">
-            K線線型日誌
+            技術分析日誌
           </h1>
-          <p class="text-[10px] text-slate-400">技術分析每日盤後紀錄</p>
+          <p class="text-[10px] text-slate-400">每日盤後紀錄</p>
         </div>
       </div>
       <div class="flex items-center space-x-2">
@@ -219,7 +219,7 @@
 
             <!-- Multi Timeframe Alignment (週/日/時/分) -->
             <div class="bg-slate-800/40 p-2.5 rounded-lg border border-slate-700/40 space-y-2">
-              <span class="text-[11px] font-semibold text-slate-400 block">週期趨勢排列 (朱家泓老師多週期對照)</span>
+              <span class="text-[11px] font-semibold text-slate-400 block">週期趨勢排列 (多週期對照)</span>
               <div class="grid grid-cols-4 gap-1.5 text-center text-xs">
                 <div v-for="tf in timeframes" :key="tf.key" class="bg-slate-900 p-1.5 rounded border border-slate-800">
                   <span class="text-[10px] text-slate-400 block mb-1">{{ tf.label }}</span>
@@ -394,12 +394,12 @@
       <!-- TAB 4: 心法紀律與備忘錄 (Checklist & Notes) -->
       <div v-show="activeTab === 'memo'" class="space-y-4">
         
-        <!-- Discipline Checklist (朱家泓老師心法) -->
+        <!-- Discipline Checklist -->
         <div class="glass-card rounded-xl p-3 space-y-3">
           <div class="flex items-center justify-between border-b border-slate-800 pb-2">
             <h2 class="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
               <i class="fa-solid fa-clipboard-check text-amber-400"></i>
-              <span>朱家泓技術分析 — 紀律檢查清單</span>
+              <span>技術分析 — 紀律檢查清單</span>
             </h2>
           </div>
 
@@ -594,7 +594,7 @@
       const addTradeModal = ref(false);
       const historyModal = ref(false);
 
-      // Master Chu's Discipline Checklist Items
+      // Discipline Checklist Items
       const disciplineList = [
         '是否符合「飆股三要素」（趨勢向上、過前高/突破均線、量增）？',
         '進場前是否已設好「嚴格停損位」（如跌破關鍵K線低點或均線）？',
