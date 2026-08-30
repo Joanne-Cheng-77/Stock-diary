@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>朱家泓技術分析每日盤後紀錄 App</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            bull: '#ef4444', // 台灣習慣：紅漲/多
+            bear: '#10b981', // 台灣習慣：綠跌/空
+            slateDark: '#0f172a',
+            cardDark: '#1e293b'
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Vue 3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts Inter & Noto Sans TC -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background-color: #0b0f19;
+      color: #f3f4f6;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    /* 預設隱藏 App 主體，密碼驗證通過才顯示 */
+    #app-container {
+      display: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-start pb-16">
+
+<!-- 密碼保護外殼 -->
+<div id="app-container" class="w-full max-w-md min-h-screen flex flex-col items-center justify-start">
+
+  <div id="app" class="w-full max-w-md min-h-screen flex flex-col bg-slate-900 shadow-2xl relative border-x border-slate-800/80">
+
+    <!-- Top Navigation Header -->
+    <header class="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2.5">
+        <i class="fa-solid fa-chart-candlestick text-amber-400 text-xl"></i>
+        <div>
+          <h1 class="text-base font-bold leading-tight bg-gradient-to-r from-red-400 to-amber-300 bg-clip-text text-transparent">
+            K線線型日誌
+          </h1>
+          <p class="text-[10px] text-slate-400">技術分析每日盤後紀錄</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <button @click="showModal('history')" class="p-2 text-slate-300 hover:text-white rounded-lg bg-slate-800/80 hover:bg-slate-700 transition" title="歷史紀錄">
+          <i class="fa-solid fa-clock-rotate-left text-sm"></i>
+        </button>
+        <button @click="saveRecord(true)" class="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold shadow-md flex items-center space-x-1 transition">
+          <i class="fa-solid fa-floppy-disk text-xs"></i>
+          <span>儲存</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Notification Toast -->
+    <transition enter-active-class="transition duration-300 ease-out" enter-from-class="transform -translate-y-4 opacity-0" enter-to-class="transform translate-y-0 opacity-100" leave-active-class="transition duration-200 ease-in" leave-from-class="transform translate-y-0 opacity-100" leave-to-class="transform -translate-y-4 opacity-0">
+      <div v-if="toastMsg" class="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-amber-500/90 text-slate-950 font-semibold text-xs shadow-xl flex items-center space-x-2 backdrop-blur-md">
+        <i class="fa-solid fa-circle-check"></i>
+        <span>{{ toastMsg }}</span>
+      </div>
+    </transition>
+
+    <main class="flex-1 overflow-y-auto p-4 space-y-4 hide-scrollbar">
+
+      <!-- Date & Major Event Header Log -->
+      <div class="glass-card rounded-xl p-3 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2 text-xs font-semibold text-slate-400">
+            <i class="fa-regular fa-calendar-days text-amber-400"></i>
+            <span>記錄日期</span>
+          </div>
+          <div class="flex items-center space-x-1">
+            <button @click="changeDate(-1)" class="p-1 px-2 text-slate-400 hover:text-white bg-slate-800 rounded text-xs"><i class="fa-solid fa-chevron-left"></i></button>
+            <input type="date" v-model="currentRecord.record_date" @change="loadRecordByDate" class="bg-slate-800 text-slate-100 text-xs rounded-lg px-2 py-1 border border-slate-700 font-mono focus:outline-none focus:border-amber-500">
+            <button @click="changeDate(1)" class="p-1 px-2 text-slate-400 hover:text-white bg-slate-800 rounded text-xs"><i class="fa-solid fa-chevron-right"></i></button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1 flex items-center justify-between">
+            <span><i class="fa-solid fa-bullhorn text-amber-400 mr-1"></i>今日大記事 (國際市場/政經)</span>
+            <span class="text-[10px] text-slate-500">{{ currentRecord.major_event.length }}/100</span>
+          </label>
+          <textarea v-model="currentRecord.major_event" rows="2" placeholder="例：美股四大指數大漲、台積電開高走高突破前高、觀望Fed利息決議..." class="w-full bg-slate-800/90 border border-slate-700/80 rounded-lg p-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 resize-none"></textarea>
+        </div>
+      </div>
+
+      <!-- Segment Navigation Tabs -->
+      <div class="flex bg-slate-800/80 p-1 rounded-xl space-x-1 text-xs border border-slate-700/60 overflow-x-auto hide-scrollbar">
+        <button v-for="tab in tabs" :key="tab.id" @click="activeTab = tab.id" :class="activeTab === tab.id ? 'bg-amber-500 text-slate-950 font-bold shadow-md' : 'text-slate-400 hover:text-slate-200'" class="flex-1 py-2 px-2 rounded-lg transition-all text-center whitespace-nowrap flex items-center justify-center space-x-1">
+          <i :class="tab.icon"></i>
+          <span>{{ tab.name }}</span>
+        </button>
+      </div>
+
+      <!-- TAB 1: 大盤與技術指標 (Market & Indicators) -->
+      <div v-show="activeTab === 'market'" class="space-y-4">
+        
+        <!-- Market Overview (TAIEX & Futures) -->
+        <div class="glass-card rounded-xl p-3 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h2 class="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+              <i class="fa-solid fa-chart-line text-red-400"></i>
+              <span>大盤 (TWII) & 期指 (WTX) 觀察</span>
+            </h2>
+            <span class="text-[10px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded-full border border-red-500/20 font-medium">量價與線型</span>
+          </div>
+
+          <!-- TAIEX Grid -->
+          <div class="bg-slate-800/50 rounded-lg p-2.5 space-y-2 border border-slate-700/50">
+            <div class="flex justify-between items-center text-xs font-bold text-amber-300">
+              <span>加權指數 (大盤)</span>
+              <div class="flex items-center space-x-2">
+                <span class="text-[10px] text-slate-400">漲跌點:</span>
+                <input type="number" v-model.number="currentRecord.market_data.taiex.change" placeholder="±點數" class="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-xs focus:outline-none" :class="currentRecord.market_data.taiex.change >= 0 ? 'text-bull' : 'text-bear'">
+              </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-xs">
+              <div>
+                <span class="text-[10px] text-slate-400 block">高點</span>
+                <input type="number" v-model.number="currentRecord.market_data.taiex.high" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 font-mono text-xs text-slate-200 focus:outline-none focus:border-amber-500">
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-400 block">低點</span>
+                <input type="number" v-model.number="currentRecord.market_data.taiex.low" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 font-mono text-xs text-slate-200 focus:outline-none focus:border-amber-500">
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-400 block">成交量(億)</span>
+                <input type="number" v-model.number="currentRecord.market_data.taiex.volume" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 font-mono text-xs text-slate-200 focus:outline-none focus:border-amber-500">
+              </div>
+            </div>
+          </div>
+
+          <!-- Futures Grid -->
+          <div class="bg-slate-800/50 rounded-lg p-2.5 space-y-2 border border-slate-700/50">
+            <div class="flex justify-between items-center text-xs font-bold text-sky-300">
+              <span>台指期 (台期指)</span>
+              <div class="flex items-center space-x-2">
+                <span class="text-[10px] text-slate-400">漲跌點:</span>
+                <input type="number" v-model.number="currentRecord.market_data.futures.change" placeholder="±點數" class="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-xs focus:outline-none" :class="currentRecord.market_data.futures.change >= 0 ? 'text-bull' : 'text-bear'">
+              </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-xs">
+              <div>
+                <span class="text-[10px] text-slate-400 block">高點</span>
+                <input type="number" v-model.number="currentRecord.market_data.futures.high" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 font-mono text-xs text-slate-200 focus:outline-none focus:border-amber-500">
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-400 block">低點</span>
+                <input type="number" v-model.number="currentRecord.market_data.futures.low" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 font-mono text-xs text-slate-200 focus:outline-none focus:border-amber-500">
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-400 block">未平倉(口)</span>
+                <input type="number" v-model.number="currentRecord.market_data.futures.open_interest" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 font-mono text-xs text-slate-200 focus:outline-none focus:border-amber-500">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Technical Indicators (MACD, KD, Multi-Timeframe) -->
+        <div class="glass-card rounded-xl p-3 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h2 class="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+              <i class="fa-solid fa-sliders text-amber-400"></i>
+              <span>大盤技術指標燈號 (MACD / KD)</span>
+            </h2>
+            <span class="text-[10px] text-slate-400">多空/強弱訊號</span>
+          </div>
+
+          <div class="space-y-2 text-xs">
+            <!-- MACD Selection -->
+            <div class="flex items-center justify-between bg-slate-800/60 p-2 rounded-lg border border-slate-700/40">
+              <span class="font-semibold text-slate-300">MACD 柱狀體/快慢線</span>
+              <div class="flex space-x-1">
+                <button v-for="opt in macdOptions" :key="opt.value" @click="currentRecord.market_data.taiex.macd = opt.value" :class="currentRecord.market_data.taiex.macd === opt.value ? opt.activeClass : 'bg-slate-900 text-slate-400 hover:text-slate-200'" class="px-2 py-1 rounded text-[11px] font-medium transition">
+                  {{ opt.label }}
+                </button>
+              </div>
+            </div>
+
+            <!-- KD Selection -->
+            <div class="flex items-center justify-between bg-slate-800/60 p-2 rounded-lg border border-slate-700/40">
+              <span class="font-semibold text-slate-300">KD 隨機指標</span>
+              <div class="flex space-x-1">
+                <button v-for="opt in kdOptions" :key="opt.value" @click="currentRecord.market_data.taiex.kd = opt.value" :class="currentRecord.market_data.taiex.kd === opt.value ? opt.activeClass : 'bg-slate-900 text-slate-400 hover:text-slate-200'" class="px-2 py-1 rounded text-[11px] font-medium transition">
+                  {{ opt.label }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Multi Timeframe Alignment (週/日/時/分) -->
+            <div class="bg-slate-800/40 p-2.5 rounded-lg border border-slate-700/40 space-y-2">
+              <span class="text-[11px] font-semibold text-slate-400 block">週期趨勢排列 (朱家泓老師多週期對照)</span>
+              <div class="grid grid-cols-4 gap-1.5 text-center text-xs">
+                <div v-for="tf in timeframes" :key="tf.key" class="bg-slate-900 p-1.5 rounded border border-slate-800">
+                  <span class="text-[10px] text-slate-400 block mb-1">{{ tf.label }}</span>
+                  <button @click="toggleTimeframeSignal(tf.key)" :class="tfSignalClass(currentRecord.market_data.timeframes[tf.key])" class="w-full py-0.5 rounded text-[11px] font-bold transition">
+                    {{ currentRecord.market_data.timeframes[tf.key] }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- TAB 2: 三大法人與籌碼 (Institutional Flows) -->
+      <div v-show="activeTab === 'flows'" class="space-y-4">
+        
+        <!-- Institutional Buy/Sell -->
+        <div class="glass-card rounded-xl p-3 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h2 class="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+              <i class="fa-solid fa-building-columns text-emerald-400"></i>
+              <span>三大法人買賣超 (億元)</span>
+            </h2>
+            <span class="text-xs font-mono font-bold" :class="totalInstitutional >= 0 ? 'text-bull' : 'text-bear'">
+              合計: {{ totalInstitutional > 0 ? '+' : '' }}{{ totalInstitutional.toFixed(2) }} 億
+            </span>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 text-xs">
+            <div class="bg-slate-800/60 p-2 rounded-lg border border-slate-700/50">
+              <label class="text-[10px] text-slate-400 block mb-1">外資買賣超</label>
+              <input type="number" step="0.1" v-model.number="currentRecord.institutional_flows.foreign" placeholder="0.0" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono text-xs focus:outline-none" :class="currentRecord.institutional_flows.foreign >= 0 ? 'text-bull' : 'text-bear'">
+            </div>
+            <div class="bg-slate-800/60 p-2 rounded-lg border border-slate-700/50">
+              <label class="text-[10px] text-slate-400 block mb-1">投信買賣超</label>
+              <input type="number" step="0.1" v-model.number="currentRecord.institutional_flows.investment_trust" placeholder="0.0" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono text-xs focus:outline-none" :class="currentRecord.institutional_flows.investment_trust >= 0 ? 'text-bull' : 'text-bear'">
+            </div>
+            <div class="bg-slate-800/60 p-2 rounded-lg border border-slate-700/50">
+              <label class="text-[10px] text-slate-400 block mb-1">自營商買賣超</label>
+              <input type="number" step="0.1" v-model.number="currentRecord.institutional_flows.dealer" placeholder="0.0" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono text-xs focus:outline-none" :class="currentRecord.institutional_flows.dealer >= 0 ? 'text-bull' : 'text-bear'">
+            </div>
+          </div>
+        </div>
+
+        <!-- Margin Balance & Futures Large Players -->
+        <div class="glass-card rounded-xl p-3 space-y-3">
+          <div class="border-b border-slate-800 pb-2">
+            <h2 class="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+              <i class="fa-solid fa-coins text-amber-400"></i>
+              <span>資券籌碼與期貨大戶部位</span>
+            </h2>
+          </div>
+
+          <!-- Margin Financing -->
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-slate-800/50 p-2 rounded-lg border border-slate-700/50 space-y-1">
+              <span class="text-[10px] text-slate-400 block">融資餘額增減 (億元)</span>
+              <input type="number" step="0.1" v-model.number="currentRecord.institutional_flows.margin_balance_change" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono text-xs focus:outline-none" :class="currentRecord.institutional_flows.margin_balance_change >= 0 ? 'text-bull' : 'text-bear'">
+            </div>
+            <div class="bg-slate-800/50 p-2 rounded-lg border border-slate-700/50 space-y-1">
+              <span class="text-[10px] text-slate-400 block">融券餘額增減 (張)</span>
+              <input type="number" v-model.number="currentRecord.institutional_flows.short_balance_change" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono text-xs focus:outline-none" :class="currentRecord.institutional_flows.short_balance_change >= 0 ? 'text-bull' : 'text-bear'">
+            </div>
+          </div>
+
+          <!-- Futures Top Traders -->
+          <div class="bg-slate-800/50 p-2.5 rounded-lg border border-slate-700/50 space-y-2 text-xs">
+            <div class="flex justify-between items-center">
+              <span class="font-semibold text-slate-300">十大交易人與特法人期貨部位</span>
+              <span class="text-[10px] text-slate-400">口數</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <span class="text-[10px] text-slate-400 block">十大交易人淨部位</span>
+                <input type="number" v-model.number="currentRecord.institutional_flows.top10_futures" placeholder="口數" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono text-xs focus:outline-none" :class="currentRecord.institutional_flows.top10_futures >= 0 ? 'text-bull' : 'text-bear'">
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-400 block">特定法人淨部位</span>
+                <input type="number" v-model.number="currentRecord.institutional_flows.specific_futures" placeholder="口數" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono text-xs focus:outline-none" :class="currentRecord.institutional_flows.specific_futures >= 0 ? 'text-bull' : 'text-bear'">
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- TAB 3: 鎖股名單與交易紀錄 (Watchlist & Trade Log) -->
+      <div v-show="activeTab === 'trades'" class="space-y-4">
+        
+        <!-- Watchlist Section -->
+        <div class="glass-card rounded-xl p-3 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div class="flex items-center space-x-1.5">
+              <i class="fa-solid fa-eye text-sky-400"></i>
+              <h2 class="text-xs font-bold text-slate-200">鎖股觀察名單 (K線形態與等待條件)</h2>
+            </div>
+            <button @click="addWatchlistModal = true" class="px-2 py-1 bg-sky-600/80 hover:bg-sky-500 text-white rounded text-[11px] font-semibold flex items-center space-x-1">
+              <i class="fa-solid fa-plus text-[10px]"></i>
+              <span>新增鎖股</span>
+            </button>
+          </div>
+
+          <div v-if="currentRecord.watchlist.length === 0" class="text-center py-6 text-slate-500 text-xs">
+            目前尚無鎖股名單，點擊「新增鎖股」記錄技術線型特徵
+          </div>
+
+          <div v-else class="space-y-2">
+            <div v-for="(item, index) in currentRecord.watchlist" :key="index" class="bg-slate-800/60 rounded-lg p-2.5 border border-slate-700/60 space-y-1.5 relative">
+              <button @click="removeWatchlist(index)" class="absolute top-2 right-2 text-slate-500 hover:text-red-400 text-xs">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+              <div class="flex items-center space-x-2">
+                <span class="font-bold text-amber-300 font-mono text-sm">{{ item.symbol }}</span>
+                <span class="font-semibold text-xs text-slate-200">{{ item.name }}</span>
+                <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-500/30">
+                  {{ item.pattern || '形態未定' }}
+                </span>
+              </div>
+              <div class="text-[11px] text-slate-300 bg-slate-900/60 p-1.5 rounded border border-slate-800">
+                <span class="text-slate-400 font-medium">觸發條件：</span>
+                <span>{{ item.trigger_condition || '無特定條件' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Today Trades Log -->
+        <div class="glass-card rounded-xl p-3 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div class="flex items-center space-x-1.5">
+              <i class="fa-solid fa-receipt text-emerald-400"></i>
+              <h2 class="text-xs font-bold text-slate-200">今日交易進出紀錄</h2>
+            </div>
+            <button @click="addTradeModal = true" class="px-2 py-1 bg-emerald-600/80 hover:bg-emerald-500 text-white rounded text-[11px] font-semibold flex items-center space-x-1">
+              <i class="fa-solid fa-plus text-[10px]"></i>
+              <span>新增交易</span>
+            </button>
+          </div>
+
+          <div v-if="currentRecord.today_trades.length === 0" class="text-center py-6 text-slate-500 text-xs">
+            今日無交易紀錄
+          </div>
+
+          <div v-else class="space-y-2">
+            <div v-for="(trade, index) in currentRecord.today_trades" :key="index" class="bg-slate-800/60 rounded-lg p-2.5 border border-slate-700/60 space-y-1 relative">
+              <button @click="removeTrade(index)" class="absolute top-2 right-2 text-slate-500 hover:text-red-400 text-xs">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+              <div class="flex items-center space-x-2">
+                <span :class="trade.action === 'BUY' ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'" class="px-1.5 py-0.5 rounded text-[10px] font-bold border">
+                  {{ trade.action === 'BUY' ? '買進 (多)' : '賣出 (空)' }}
+                </span>
+                <span class="font-bold text-slate-100 font-mono text-sm">{{ trade.symbol }}</span>
+                <span class="text-xs text-slate-300">{{ trade.name }}</span>
+              </div>
+              <div class="grid grid-cols-3 gap-1 text-[11px] font-mono text-slate-300 pt-1">
+                <div>成交價: <span class="text-white">{{ trade.price }}</span></div>
+                <div>股數: <span class="text-white">{{ trade.quantity }}</span></div>
+                <div>總金額: <span class="text-amber-300">${{ Math.round(trade.price * trade.quantity).toLocaleString() }}</span></div>
+              </div>
+              <div v-if="trade.stop_loss" class="text-[10px] text-red-400">
+                嚴格停損價: {{ trade.stop_loss }} 元
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- TAB 4: 心法紀律與備忘錄 (Checklist & Notes) -->
+      <div v-show="activeTab === 'memo'" class="space-y-4">
+        
+        <!-- Discipline Checklist (朱家泓老師心法) -->
+        <div class="glass-card rounded-xl p-3 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h2 class="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+              <i class="fa-solid fa-clipboard-check text-amber-400"></i>
+              <span>朱家泓技術分析 — 紀律檢查清單</span>
+            </h2>
+          </div>
+
+          <div class="space-y-2 text-xs">
+            <label v-for="(item, idx) in disciplineList" :key="idx" class="flex items-start space-x-2.5 p-2 bg-slate-800/40 hover:bg-slate-800/80 rounded-lg cursor-pointer transition border border-slate-700/40">
+              <input type="checkbox" v-model="currentRecord.discipline_checks[idx]" class="mt-0.5 rounded bg-slate-900 border-slate-700 text-amber-500 focus:ring-amber-500 w-4 h-4">
+              <span class="text-slate-300 leading-tight" :class="currentRecord.discipline_checks[idx] ? 'line-through text-slate-500' : ''">
+                {{ item }}
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Memo Textarea -->
+        <div class="glass-card rounded-xl p-3 space-y-2">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h2 class="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+              <i class="fa-solid fa-pen-to-square text-sky-400"></i>
+              <span>盤後檢討與操盤備忘錄</span>
+            </h2>
+          </div>
+          <textarea v-model="currentRecord.memo" rows="5" placeholder="記錄今日交易心態、錯失的K線訊號、明日操盤策略與停損執行狀況..." class="w-full bg-slate-800/80 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 resize-none"></textarea>
+        </div>
+
+      </div>
+
+    </main>
+
+    <!-- Bottom Mobile Dock -->
+    <nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 px-6 py-2 flex justify-between items-center z-30">
+      <button @click="activeTab = 'market'" :class="activeTab === 'market' ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'" class="flex flex-col items-center space-y-0.5">
+        <i class="fa-solid fa-chart-candlestick text-base"></i>
+        <span class="text-[10px]">大盤指標</span>
+      </button>
+      <button @click="activeTab = 'flows'" :class="activeTab === 'flows' ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'" class="flex flex-col items-center space-y-0.5">
+        <i class="fa-solid fa-users-line text-base"></i>
+        <span class="text-[10px]">籌碼資券</span>
+      </button>
+      <button @click="activeTab = 'trades'" :class="activeTab === 'trades' ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'" class="flex flex-col items-center space-y-0.5">
+        <i class="fa-solid fa-list-check text-base"></i>
+        <span class="text-[10px]">鎖股交易</span>
+      </button>
+      <button @click="activeTab = 'memo'" :class="activeTab === 'memo' ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'" class="flex flex-col items-center space-y-0.5">
+        <i class="fa-solid fa-book-bookmark text-base"></i>
+        <span class="text-[10px]">紀律檢討</span>
+      </button>
+    </nav>
+
+    <!-- MODAL 1: Add Watchlist Item -->
+    <div v-if="addWatchlistModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="glass-card w-full max-w-sm rounded-2xl p-4 space-y-3 border border-slate-700 shadow-2xl">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <h3 class="text-sm font-bold text-amber-400">新增鎖股名單</h3>
+          <button @click="addWatchlistModal = false" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="space-y-2 text-xs">
+          <div>
+            <label class="block text-slate-400 mb-1">股票代號</label>
+            <input type="text" v-model="newWatch.symbol" placeholder="例：2330" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-white font-mono focus:outline-none focus:border-amber-500">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">股票名稱</label>
+            <input type="text" v-model="newWatch.name" placeholder="例：台積電" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-amber-500">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">K線形態/訊號</label>
+            <input type="text" v-model="newWatch.pattern" placeholder="例：W底完成、突破均線糾結、飆股三訊號" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-amber-500">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">進場等待條件</label>
+            <textarea v-model="newWatch.trigger_condition" rows="2" placeholder="例：帶量突破 1000 元且收高" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-amber-500 resize-none"></textarea>
+          </div>
+        </div>
+        <div class="flex justify-end space-x-2 pt-2">
+          <button @click="addWatchlistModal = false" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs">取消</button>
+          <button @click="confirmAddWatchlist" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold">新增紀錄</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 2: Add Trade Log -->
+    <div v-if="addTradeModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="glass-card w-full max-w-sm rounded-2xl p-4 space-y-3 border border-slate-700 shadow-2xl">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <h3 class="text-sm font-bold text-emerald-400">新增今日交易進出</h3>
+          <button @click="addTradeModal = false" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="space-y-2 text-xs">
+          <div class="flex space-x-2">
+            <button @click="newTrade.action = 'BUY'" :class="newTrade.action === 'BUY' ? 'bg-red-600 text-white font-bold' : 'bg-slate-800 text-slate-400'" class="flex-1 py-1.5 rounded text-xs transition">買進 (多)</button>
+            <button @click="newTrade.action = 'SELL'" :class="newTrade.action === 'SELL' ? 'bg-emerald-600 text-white font-bold' : 'bg-slate-800 text-slate-400'" class="flex-1 py-1.5 rounded text-xs transition">賣出 (空)</button>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-slate-400 mb-1">股票代號</label>
+              <input type="text" v-model="newTrade.symbol" placeholder="2317" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-white font-mono focus:outline-none focus:border-amber-500">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">股票名稱</label>
+              <input type="text" v-model="newTrade.name" placeholder="鴻海" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-white focus:outline-none focus:border-amber-500">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-slate-400 mb-1">成交價格</label>
+              <input type="number" step="0.1" v-model.number="newTrade.price" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-white font-mono focus:outline-none focus:border-amber-500">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">交易股數</label>
+              <input type="number" v-model.number="newTrade.quantity" placeholder="1000" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-white font-mono focus:outline-none focus:border-amber-500">
+            </div>
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">預設停損價 (必填)</label>
+            <input type="number" step="0.1" v-model.number="newTrade.stop_loss" placeholder="嚴格執行跌破停損" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-red-400 font-mono focus:outline-none focus:border-red-500">
+          </div>
+        </div>
+        <div class="flex justify-end space-x-2 pt-2">
+          <button @click="addTradeModal = false" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs">取消</button>
+          <button @click="confirmAddTrade" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold">確認紀錄</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 3: History & Data Backup -->
+    <div v-if="historyModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="glass-card w-full max-w-sm rounded-2xl p-4 space-y-3 border border-slate-700 shadow-2xl max-h-[80vh] flex flex-col">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <h3 class="text-sm font-bold text-amber-400">歷史紀錄與數據導出</h3>
+          <button @click="historyModal = false" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="flex-1 overflow-y-auto space-y-2 pr-1 hide-scrollbar">
+          <div class="text-xs font-semibold text-slate-400 mb-1">已儲存日誌列表:</div>
+          <div v-if="savedDates.length === 0" class="text-xs text-slate-500 text-center py-4">尚無歷史紀錄</div>
+          <div v-for="d in savedDates" :key="d" @click="selectHistoryDate(d)" class="p-2 bg-slate-800/80 hover:bg-slate-700 rounded-lg flex justify-between items-center cursor-pointer transition border border-slate-700/50">
+            <span class="font-mono text-xs text-amber-300">{{ d }}</span>
+            <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+          </div>
+        </div>
+        <div class="border-t border-slate-800 pt-3 space-y-2">
+          <button @click="exportJSON" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 border border-slate-700">
+            <i class="fa-solid fa-file-export"></i>
+            <span>匯出 JSON 備份檔案</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- 密碼鎖 JavaScript 驗證邏輯 -->
+<script>
+  // --------------------------------------------------
+  // 請在此處將 8888 修改成你自己的專屬存取密碼
+  // --------------------------------------------------
+  const myPassword = "1107"; 
+
+  let input = prompt("請輸入盤後日誌存取密碼：");
+  if (input === myPassword) {
+      document.getElementById("app-container").style.display = "flex";
+  } else {
+      alert("密碼錯誤，無法開啟 App！");
+      window.location.reload();
+  }
+</script>
+
+<script>
+  const { createApp, ref, computed, onMounted, watch } = Vue;
+
+  createApp({
+    setup() {
+      // Tabs Configuration
+      const tabs = [
+        { id: 'market', name: '大盤指標', icon: 'fa-solid fa-chart-candlestick' },
+        { id: 'flows', name: '籌碼資券', icon: 'fa-solid fa-users-line' },
+        { id: 'trades', name: '鎖股交易', icon: 'fa-solid fa-list-check' },
+        { id: 'memo', name: '紀律檢討', icon: 'fa-solid fa-book-bookmark' }
+      ];
+      const activeTab = ref('market');
+
+      // Toast Notification
+      const toastMsg = ref('');
+      const showToast = (msg) => {
+        toastMsg.value = msg;
+        setTimeout(() => { toastMsg.value = ''; }, 2500);
+      };
+
+      // Modals
+      const addWatchlistModal = ref(false);
+      const addTradeModal = ref(false);
+      const historyModal = ref(false);
+
+      // Master Chu's Discipline Checklist Items
+      const disciplineList = [
+        '是否符合「飆股三要素」（趨勢向上、過前高/突破均線、量增）？',
+        '進場前是否已設好「嚴格停損位」（如跌破關鍵K線低點或均線）？',
+        '是否順應大盤多空趨勢，絕不逆勢硬拗？',
+        '單筆交易風險是否控制在總資金 2% 以內？',
+        '是否做到「盤後靜心檢討，盤中嚴格遵守訊號紀律」？'
+      ];
+
+      // Form Options
+      const macdOptions = [
+        { label: '多頭/轉強', value: 'bullish_strong', activeClass: 'bg-red-600 text-white font-bold' },
+        { label: '多頭/轉弱', value: 'bullish_weak', activeClass: 'bg-amber-600 text-white font-bold' },
+        { label: '空頭/轉強', value: 'bearish_weak', activeClass: 'bg-emerald-600 text-white font-bold' },
+        { label: '空頭/轉弱', value: 'bearish_strong', activeClass: 'bg-green-700 text-white font-bold' }
+      ];
+
+      const kdOptions = [
+        { label: '黃金交叉', value: 'golden_cross', activeClass: 'bg-red-600 text-white font-bold' },
+        { label: '高檔鈍化', value: 'high_pass', activeClass: 'bg-red-500 text-white font-bold' },
+        { label: '死亡交叉', value: 'death_cross', activeClass: 'bg-emerald-600 text-white font-bold' },
+        { label: '低檔鈍化', value: 'low_pass', activeClass: 'bg-emerald-700 text-white font-bold' }
+      ];
+
+      const timeframes = [
+        { key: 'weekly', label: '週線 (W)' },
+        { key: 'daily', label: '日線 (D)' },
+        { key: '60m', label: '60分 (60m)' },
+        { key: '15m', label: '15分 (15m)' }
+      ];
+
+      // Helper to format Date string (YYYY-MM-DD)
+      const getTodayString = () => {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
+      // Default Record Template
+      const createEmptyRecord = (dateStr) => ({
+        record_date: dateStr || getTodayString(),
+        major_event: '',
+        market_data: {
+          taiex: { high: null, low: null, change: null, volume: null, macd: 'bullish_strong', kd: 'golden_cross' },
+          futures: { high: null, low: null, change: null, open_interest: null, macd: 'bullish_strong', kd: 'golden_cross' },
+          timeframes: { weekly: '多', daily: '多', '60m': '多', '15m': '觀望' }
+        },
+        institutional_flows: {
+          foreign: 0,
+          investment_trust: 0,
+          dealer: 0,
+          margin_balance_change: 0,
+          short_balance_change: 0,
+          top10_futures: 0,
+          specific_futures: 0
+        },
+        watchlist: [],
+        today_trades: [],
+        discipline_checks: [false, false, false, false, false],
+        memo: ''
+      });
+
+      const currentRecord = ref(createEmptyRecord());
+      const savedDates = ref([]);
+
+      // Computed Properties
+      const totalInstitutional = computed(() => {
+        const f = currentRecord.value.institutional_flows.foreign || 0;
+        const i = currentRecord.value.institutional_flows.investment_trust || 0;
+        const d = currentRecord.value.institutional_flows.dealer || 0;
+        return f + i + d;
+      });
+
+      // Storage Logic
+      const saveRecord = (showNotification = true) => {
+        const dateKey = `stock_log_${currentRecord.value.record_date}`;
+        localStorage.setItem(dateKey, JSON.stringify(currentRecord.value));
+        updateSavedDatesList();
+        if (showNotification) {
+          showToast(`已成功儲存 ${currentRecord.value.record_date} 盤後紀錄`);
+        }
+      };
+
+      const loadRecordByDate = () => {
+        const dateKey = `stock_log_${currentRecord.value.record_date}`;
+        const saved = localStorage.getItem(dateKey);
+        if (saved) {
+          try {
+            currentRecord.value = JSON.parse(saved);
+            showToast(`已載入 ${currentRecord.value.record_date} 歷史資料`);
+          } catch (e) {
+            console.error(e);
+          }
+        } else {
+          // Keep current date, reset other fields
+          const targetDate = currentRecord.value.record_date;
+          currentRecord.value = createEmptyRecord(targetDate);
+        }
+      };
+
+      const changeDate = (offsetDays) => {
+        const d = new Date(currentRecord.value.record_date);
+        d.setDate(d.getDate() + offsetDays);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        currentRecord.value.record_date = `${year}-${month}-${day}`;
+        loadRecordByDate();
+      };
+
+      const updateSavedDatesList = () => {
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('stock_log_')) {
+            keys.push(key.replace('stock_log_', ''));
+          }
+        }
+        savedDates.value = keys.sort().reverse();
+      };
+
+      // Modal Triggers & Actions
+      const newWatch = ref({ symbol: '', name: '', pattern: '', trigger_condition: '' });
+      const confirmAddWatchlist = () => {
+        if (!newWatch.value.symbol) {
+          showToast('請輸入股票代號');
+          return;
+        }
+        currentRecord.value.watchlist.push({ ...newWatch.value });
+        newWatch.value = { symbol: '', name: '', pattern: '', trigger_condition: '' };
+        addWatchlistModal.value = false;
+        saveRecord(false);
+        showToast('已新增鎖股觀察項目');
+      };
+
+      const removeWatchlist = (idx) => {
+        currentRecord.value.watchlist.splice(idx, 1);
+        saveRecord(false);
+      };
+
+      const newTrade = ref({ action: 'BUY', symbol: '', name: '', price: null, quantity: 1000, stop_loss: null });
+      const confirmAddTrade = () => {
+        if (!newTrade.value.symbol || !newTrade.value.price) {
+          showToast('請填寫完整成交資訊');
+          return;
+        }
+        currentRecord.value.today_trades.push({ ...newTrade.value });
+        newTrade.value = { action: 'BUY', symbol: '', name: '', price: null, quantity: 1000, stop_loss: null };
+        addTradeModal.value = false;
+        saveRecord(false);
+        showToast('已記錄今日交易');
+      };
+
+      const removeTrade = (idx) => {
+        currentRecord.value.today_trades.splice(idx, 1);
+        saveRecord(false);
+      };
+
+      // Timeframe Toggle Helper
+      const toggleTimeframeSignal = (key) => {
+        const states = ['多', '空', '觀望'];
+        const current = currentRecord.value.market_data.timeframes[key] || '多';
+        const nextIdx = (states.indexOf(current) + 1) % states.length;
+        currentRecord.value.market_data.timeframes[key] = states[nextIdx];
+      };
+
+      const tfSignalClass = (sig) => {
+        if (sig === '多') return 'bg-red-600/30 text-red-400 border border-red-500/50';
+        if (sig === '空') return 'bg-emerald-600/30 text-emerald-400 border border-emerald-500/50';
+        return 'bg-slate-800 text-slate-400 border border-slate-700';
+      };
+
+      const showModal = (type) => {
+        if (type === 'history') {
+          updateSavedDatesList();
+          historyModal.value = true;
+        }
+      };
+
+      const selectHistoryDate = (dateStr) => {
+        currentRecord.value.record_date = dateStr;
+        loadRecordByDate();
+        historyModal.value = false;
+      };
+
+      // Export JSON
+      const exportJSON = () => {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentRecord.value, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `stock_analysis_${currentRecord.value.record_date}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        showToast('備忘紀錄 JSON 匯出完成');
+      };
+
+      // On Mounted
+      onMounted(() => {
+        loadRecordByDate();
+      });
+
+      return {
+        tabs,
+        activeTab,
+        currentRecord,
+        toastMsg,
+        showToast,
+        addWatchlistModal,
+        addTradeModal,
+        historyModal,
+        disciplineList,
+        macdOptions,
+        kdOptions,
+        timeframes,
+        savedDates,
+        totalInstitutional,
+        saveRecord,
+        loadRecordByDate,
+        changeDate,
+        newWatch,
+        confirmAddWatchlist,
+        removeWatchlist,
+        newTrade,
+        confirmAddTrade,
+        removeTrade,
+        toggleTimeframeSignal,
+        tfSignalClass,
+        showModal,
+        selectHistoryDate,
+        exportJSON
+      };
+    }
+  }).mount('#app');
+</script>
+
+</body>
+</html>
