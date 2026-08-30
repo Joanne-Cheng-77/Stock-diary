@@ -552,19 +552,27 @@
 
 </div>
 
-<!-- 密碼鎖 JavaScript 驗證邏輯 -->
+<!-- 裝置登入狀態與密碼驗證邏輯 -->
 <script>
-  // --------------------------------------------------
-  // 請在此處將 8888 修改成你自己的專屬存取密碼
-  // --------------------------------------------------
-  const myPassword = "1107"; 
+  const myPassword = "1107"; // 你的專屬密碼
 
-  let input = prompt("請輸入盤後日誌存取密碼：");
-  if (input === myPassword) {
+  // 檢查此裝置是否已經驗證過
+  const isAuth = localStorage.getItem("app_authenticated");
+
+  if (isAuth === "true") {
+      // 已經登入過，直接顯示 App
       document.getElementById("app-container").style.display = "flex";
   } else {
-      alert("密碼錯誤，無法開啟 App！");
-      window.location.reload();
+      // 第一次打開，彈出密碼輸入框
+      let input = prompt("請輸入盤後日誌存取密碼：");
+      if (input === myPassword) {
+          // 密碼正確，記錄登入狀態至此裝置
+          localStorage.setItem("app_authenticated", "true");
+          document.getElementById("app-container").style.display = "flex";
+      } else {
+          alert("密碼錯誤，無法開啟 App！");
+          window.location.reload();
+      }
   }
 </script>
 
